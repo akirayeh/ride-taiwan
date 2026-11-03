@@ -1,0 +1,275 @@
+<title>一路騎台灣</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 單一視覺世界：遊戲本身的晴空色票，不跟隨深淺色主題 */
+:root {
+	--sky: #8fcdef;
+	--sky-deep: #5fb2e6;
+	--ink: #23466e;
+	--paper: #fbf6e9;
+	--sun: #f6c445;
+	--grass: #86c46b;
+	color-scheme: light;
+}
+html, body { height: 100%; margin: 0; background: var(--sky); overflow: hidden; touch-action: none; }
+/* 遊戲畫面固定 16:9 置中；比較寬或比較高的螢幕，四周用目前場景的模糊氛圍圖補滿，不出現黑邊 */
+#canvas { display: block; position: fixed; left: 0; top: 0; outline: none; background: var(--sky); }
+.amb { position: fixed; inset: -40px; background: var(--sky) center / cover no-repeat; filter: blur(14px) saturate(1.1) brightness(0.92); transition: opacity 1.2s ease; }
+#amb-b { opacity: 0; }
+#amb-shade { position: fixed; inset: 0; pointer-events: none; }
+#status {
+	position: fixed; inset: 0; z-index: 5;
+	display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+	background: linear-gradient(var(--sky-deep), var(--sky) 55%, var(--grass) 55%, var(--grass));
+	color: var(--ink); font: 600 16px/1.5 system-ui, "PingFang TC", "Noto Sans TC", sans-serif;
+	padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+	text-align: center;
+}
+#status h1 {
+	margin: 0; font-size: clamp(34px, 9vw, 64px); letter-spacing: 0.08em; color: var(--ink);
+	text-shadow: 0 4px 0 var(--paper), 4px 0 0 var(--paper), -4px 0 0 var(--paper), 0 -4px 0 var(--paper);
+	text-wrap: balance;
+}
+#status .sub { font-size: 14px; letter-spacing: 0.3em; }
+#bar { width: min(320px, 70vw); height: 14px; background: var(--paper); border: 3px solid var(--ink); border-radius: 4px; overflow: hidden; }
+#fill { height: 100%; width: 0%; background: var(--sun); transition: width .2s; }
+#fill.indeterminate { width: 35%; animation: slide 1.1s ease-in-out infinite alternate; }
+@keyframes slide { from { transform: translateX(-10%); } to { transform: translateX(200%); } }
+@media (prefers-reduced-motion: reduce) { #fill.indeterminate { animation: none; width: 100%; } }
+#msg { min-height: 1.5em; font-size: 14px; max-width: 30em; }
+#notice { display: none; background: var(--paper); border: 3px solid var(--ink); border-radius: 10px; padding: 12px 16px; max-width: 30em; white-space: pre-line; }
+#rotate-hint {
+	display: none; position: fixed; inset: 0; z-index: 20; background: var(--sky); color: var(--ink);
+	font: 700 22px/1.7 system-ui, "PingFang TC", "Noto Sans TC", sans-serif; text-align: center;
+	align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+	padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#rotate-hint .phone { width: 46px; height: 78px; border: 5px solid var(--ink); border-radius: 10px; animation: turn 2s ease-in-out infinite; }
+@keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (max-width: 900px) { #rotate-hint { display: flex; } }
+#rotate-hint.dismissed { display: none !important; }
+#rotate-hint button {
+	margin-top: 14px; padding: 12px 28px; font: 700 18px/1.2 system-ui, "PingFang TC", "Noto Sans TC", sans-serif;
+	color: var(--ink); background: var(--sun); border: 3px solid var(--ink); border-radius: 12px; cursor: pointer;
+}
+#rotate-hint button:focus-visible { outline: 3px solid var(--paper); outline-offset: 2px; }
+#rotate-hint .small { font-size: 14px; font-weight: 600; opacity: 0.8; }
+#sound-hint {
+	display: none; position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 15;
+	padding: 8px 16px; border-radius: 999px; background: rgba(251, 246, 233, 0.92); border: 2px solid var(--ink); color: var(--ink);
+	font: 700 15px/1.3 system-ui, "PingFang TC", "Noto Sans TC", sans-serif; pointer-events: none; white-space: nowrap;
+}
+#sound-hint.show { display: block; }
+</style>
+
+<div class="amb" id="amb-a" style="background-image:url(amb_title.jpg)"></div>
+<div class="amb" id="amb-b"></div>
+<div id="amb-shade"></div>
+<div id="sound-hint">輕觸畫面開啟聲音</div>
+<canvas id="canvas" tabindex="0">你的瀏覽器不支援 canvas。</canvas>
+
+<div id="status">
+	<h1>一路騎台灣</h1>
+	<div class="sub">RIDE TAIWAN · v0.1</div>
+	<div id="bar"><div id="fill" class="indeterminate"></div></div>
+	<div id="msg">正在下載遊戲（約 21 MB，第一次需要一點時間）…</div>
+	<div id="notice"></div>
+</div>
+
+<div id="rotate-hint">
+	<div class="phone"></div>
+	<div>請把手機轉成橫向</div>
+	<div style="font-size:15px;font-weight:600">騎車要橫著看風景才舒服</div>
+	<div class="small">沒反應的話，請確認手機的「自動旋轉」已開啟</div>
+	<button type="button" id="play-portrait" onclick="document.getElementById('rotate-hint').classList.add('dismissed')">先直向玩</button>
+	<div class="small">直向畫面會比較小</div>
+</div>
+
+<script>
+// 聲音解鎖：瀏覽器（特別是 iPhone）只允許在「使用者點擊的當下」啟動聲音。
+// Godot 會延到下一格才恢復音訊，iOS 不認，所以這裡記下遊戲建立的 AudioContext，在點擊當下直接恢復。
+(function () {
+	const AC = window.AudioContext || window.webkitAudioContext;
+	if (!AC) { return; }
+	const ctxs = [];
+	function Wrapped(...args) { const c = new AC(...args); ctxs.push(c); watch(c); return c; }
+	Wrapped.prototype = AC.prototype;
+	window.AudioContext = Wrapped;
+	if (window.webkitAudioContext) { window.webkitAudioContext = Wrapped; }
+	// iOS 17+：讓網頁聲音不受側邊靜音鍵影響（像影片一樣播放）
+	try { if (navigator.audioSession) { navigator.audioSession.type = 'playback'; } } catch (e) { /* 不支援就略過 */ }
+	const hint = () => document.getElementById('sound-hint');
+	function update() {
+		const blocked = ctxs.some(c => c.state !== 'running') || (window.rtMusic && window.rtMusic.blocked());
+		const need = blocked && !document.getElementById('status');
+		const h = hint();
+		if (h) { h.classList.toggle('show', need); }
+	}
+	function watch(c) { c.addEventListener('statechange', update); setTimeout(update, 0); }
+	function unlock() {
+		if (window.rtMusic) { window.rtMusic.unlock(); }
+		for (const c of ctxs) {
+			if (c.state !== 'running') {
+				c.resume().then(update, () => {});
+				// 在點擊當下播放一段無聲音訊，iOS 才會真正打開聲音
+				try {
+					const b = c.createBuffer(1, 1, 22050);
+					const src = c.createBufferSource();
+					src.buffer = b; src.connect(c.destination); src.start(0);
+				} catch (e) { /* 略過 */ }
+			}
+		}
+	}
+	for (const ev of ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'keydown', 'click']) {
+		window.addEventListener(ev, unlock, { capture: true, passive: true });
+	}
+	setInterval(update, 1000);
+
+	// 背景音樂：網頁版用頁面自己的 <audio> 播放（不佔用遊戲主執行緒、不會因掉格而斷音）
+	// 遊戲透過 JavaScriptBridge 呼叫 rtMusic.play('title' | 'ride')、stop()、setVolume(0~1)
+	window.rtMusic = (function () {
+		const files = { title: 'music_title.mp3', ride: 'music_ride.mp3' };
+		const BASE = 0.8;
+		const els = {};
+		let want = null, vol = 1, blockedFlag = false;
+		function el(name) {
+			if (!els[name]) {
+				const a = new Audio(files[name]);
+				a.loop = true; a.preload = 'auto'; a.volume = 0; a._target = 0;
+				els[name] = a;
+			}
+			return els[name];
+		}
+		// 每 50ms 把音量往目標靠近，做淡入淡出
+		setInterval(() => {
+			for (const k in els) {
+				const a = els[k];
+				const t = a._target * BASE * vol;
+				const step = 0.05;
+				if (Math.abs(a.volume - t) <= step) { a.volume = Math.max(0, Math.min(1, t)); }
+				else { a.volume = Math.max(0, Math.min(1, a.volume + (t > a.volume ? step : -step))); }
+				if (a._target === 0 && a.volume === 0 && !a.paused) { a.pause(); }
+			}
+		}, 50);
+		function start(name) {
+			const a = el(name);
+			a._target = 1;
+			const p = a.play();
+			if (p && p.then) {
+				p.then(() => { blockedFlag = false; update(); }, () => { blockedFlag = true; update(); });
+			}
+		}
+		return {
+			play(name) {
+				if (!files[name]) { return; }
+				want = name;
+				for (const k in els) { if (k !== name) { els[k]._target = 0; } }
+				start(name);
+			},
+			stop() { want = null; for (const k in els) { els[k]._target = 0; } },
+			setVolume(v) { vol = Math.max(0, Math.min(1, Number(v) || 0)); },
+			unlock() { if (want && el(want).paused) { start(want); } },
+			blocked() { return blockedFlag && want !== null; },
+			state() { return Object.keys(els).map(k => `${k}:${els[k].paused ? 'paused' : 'playing'} t=${els[k].currentTime.toFixed(1)} v=${els[k].volume.toFixed(2)}`).join(' | ') + ` want=${want}`; },
+		};
+	}());
+}());
+</script>
+<script>
+// 遊戲引擎（index.wasm）超過單檔上限，以 gzip 壓縮後發布（engine.gz.wasm），這裡在瀏覽器端解壓縮。
+(function () {
+	const realFetch = window.fetch.bind(window);
+	window.fetch = function (input, init) {
+		const url = typeof input === 'string' ? input : (input && input.url) || '';
+		// 發布平台只接受常見檔案類型，所以 index.pck 以 game-data.wasm 的名稱發布
+		if (/index\.pck(\?.*)?$/.test(url)) {
+			return realFetch(url.replace(/index\.pck/, 'game-data.wasm'), init);
+		}
+		if (/index\.wasm(\?.*)?$/.test(url)) {
+			return realFetch(url.replace(/index\.wasm/, 'engine.gz.wasm'), init).then(async (r) => {
+				if (!r.ok) { return r; }
+				let bytes = new Uint8Array(await r.arrayBuffer());
+				if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+					document.getElementById('msg').textContent = '解壓縮中…';
+					const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+					bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+				}
+				return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/wasm', 'Content-Length': String(bytes.length) } });
+			});
+		}
+		return realFetch(input, init);
+	};
+}());
+</script>
+<script src="index.js"></script>
+<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":11893696,"index.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
+// 自己控制畫布大小（16:9 置中），Godot 依畫布像素尺寸算畫面
+GODOT_CONFIG.canvasResizePolicy = 0;
+(function () {
+	const canvas = document.getElementById('canvas');
+	const shade = document.getElementById('amb-shade');
+	function fit() {
+		const vw = window.innerWidth, vh = window.innerHeight;
+		let w = vw, h = vw * 9 / 16;
+		if (h > vh) { h = vh; w = vh * 16 / 9; }
+		w = Math.round(w); h = Math.round(h);
+		const x = Math.round((vw - w) / 2), y = Math.round((vh - h) / 2);
+		const dpr = Math.min(window.devicePixelRatio || 1, 2);
+		canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+		canvas.style.left = x + 'px'; canvas.style.top = y + 'px';
+		canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+		// 靠近遊戲畫面的地方淡淡壓暗，讓畫面邊界自然
+		shade.style.background = x > 0
+			? `linear-gradient(90deg, rgba(20,40,60,.0) 0, rgba(20,40,60,.18) ${x}px, transparent ${x}px, transparent ${x + w}px, rgba(20,40,60,.18) ${x + w}px, rgba(20,40,60,0) 100%)`
+			: 'none';
+	}
+	fit();
+	window.addEventListener('resize', fit);
+	window.addEventListener('orientationchange', () => setTimeout(fit, 200));
+	// 由遊戲呼叫：切換兩側的氛圍圖（title / town / fields / mountain / grassland）
+	let cur = 'title', front = 'amb-a';
+	window.rtAmbient = function (key) {
+		if (!key || key === cur) { return; }
+		cur = key;
+		const back = front === 'amb-a' ? 'amb-b' : 'amb-a';
+		const nb = document.getElementById(back), nf = document.getElementById(front);
+		nb.style.backgroundImage = `url(amb_${key}.jpg)`;
+		nb.style.opacity = '1'; nf.style.opacity = '0';
+		front = back;
+	};
+}());
+const engine = new Engine(GODOT_CONFIG);
+(function () {
+	const status = document.getElementById('status');
+	const fill = document.getElementById('fill');
+	const msg = document.getElementById('msg');
+	const notice = document.getElementById('notice');
+	function fail(err) {
+		console.error(err);
+		notice.style.display = 'block';
+		notice.textContent = '遊戲無法啟動：\n' + (err && err.message ? err.message : String(err));
+		document.getElementById('bar').style.display = 'none';
+		msg.textContent = '';
+	}
+	if (typeof DecompressionStream === 'undefined') {
+		fail(new Error('這個瀏覽器太舊，不支援解壓縮。請更新到 iOS 16.4 / Chrome 80 以上。'));
+		return;
+	}
+	const missing = Engine.getMissingFeatures({ threads: false });
+	if (missing.length) {
+		fail(new Error('瀏覽器缺少執行遊戲需要的功能：\n' + missing.join('\n')));
+		return;
+	}
+	engine.startGame({
+		onProgress: function (current, total) {
+			if (current > 0 && total > 0) {
+				fill.classList.remove('indeterminate');
+				fill.style.width = Math.min(100, current / total * 100) + '%';
+				if (current >= total) { msg.textContent = '啟動中…'; }
+			}
+		},
+	}).then(() => { status.remove(); document.getElementById('canvas').focus(); }, fail);
+}());
+</script>
