@@ -73,7 +73,7 @@ html, body { height: 100%; margin: 0; background: var(--sky); overflow: hidden; 
 	<h1>一路騎台灣</h1>
 	<div class="sub">RIDE TAIWAN · v0.1</div>
 	<div id="bar"><div id="fill" class="indeterminate"></div></div>
-	<div id="msg">正在下載遊戲（約 21 MB，第一次需要一點時間）…</div>
+	<div id="msg">正在下載遊戲（第一次需要一點時間，之後開啟會快很多）…</div>
 	<div id="notice"></div>
 </div>
 
@@ -176,35 +176,9 @@ html, body { height: 100%; margin: 0; background: var(--sky); overflow: hidden; 
 	}());
 }());
 </script>
-<script>
-// 遊戲引擎（index.wasm）超過單檔上限，以 gzip 壓縮後發布（engine.gz.wasm），這裡在瀏覽器端解壓縮。
-(function () {
-	const realFetch = window.fetch.bind(window);
-	window.fetch = function (input, init) {
-		const url = typeof input === 'string' ? input : (input && input.url) || '';
-		// 發布平台只接受常見檔案類型，所以 index.pck 以 game-data.wasm 的名稱發布
-		if (/index\.pck(\?.*)?$/.test(url)) {
-			return realFetch(url.replace(/index\.pck/, 'game-data.wasm'), init);
-		}
-		if (/index\.wasm(\?.*)?$/.test(url)) {
-			return realFetch(url.replace(/index\.wasm/, 'engine.gz.wasm'), init).then(async (r) => {
-				if (!r.ok) { return r; }
-				let bytes = new Uint8Array(await r.arrayBuffer());
-				if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-					document.getElementById('msg').textContent = '解壓縮中…';
-					const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-					bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-				}
-				return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/wasm', 'Content-Length': String(bytes.length) } });
-			});
-		}
-		return realFetch(input, init);
-	};
-}());
-</script>
 <script src="index.js"></script>
 <script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":12596224,"index.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":12596192,"index.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
 // 自己控制畫布大小（16:9 置中），Godot 依畫布像素尺寸算畫面
 GODOT_CONFIG.canvasResizePolicy = 0;
 (function () {
@@ -252,10 +226,6 @@ const engine = new Engine(GODOT_CONFIG);
 		notice.textContent = '遊戲無法啟動：\n' + (err && err.message ? err.message : String(err));
 		document.getElementById('bar').style.display = 'none';
 		msg.textContent = '';
-	}
-	if (typeof DecompressionStream === 'undefined') {
-		fail(new Error('這個瀏覽器太舊，不支援解壓縮。請更新到 iOS 16.4 / Chrome 80 以上。'));
-		return;
 	}
 	const missing = Engine.getMissingFeatures({ threads: false });
 	if (missing.length) {
